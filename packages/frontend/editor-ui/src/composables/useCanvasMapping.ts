@@ -198,6 +198,7 @@ export function useCanvasMapping({
 								nodeTypeDescription,
 							),
 							nodeTypeDescription.inputNames ?? [],
+							node.type,
 						)
 					: [];
 
@@ -261,6 +262,7 @@ export function useCanvasMapping({
 								nodeTypeDescription,
 							),
 							nodeTypeDescription.outputNames ?? [],
+							node.type,
 						)
 					: [];
 

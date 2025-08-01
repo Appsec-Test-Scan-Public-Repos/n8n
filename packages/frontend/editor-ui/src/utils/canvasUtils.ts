@@ -10,7 +10,7 @@ import { CanvasConnectionMode } from '@/types';
 import type { Connection } from '@vue-flow/core';
 import { isValidCanvasConnectionMode, isValidNodeConnectionType } from '@/utils/typeGuards';
 import { NodeConnectionTypes } from 'n8n-workflow';
-import { NODE_MIN_INPUT_ITEMS_COUNT } from '@/constants';
+import { NODE_MIN_INPUT_ITEMS_COUNT, AGENT_NODE_TYPE } from '@/constants';
 
 /**
  * Maps multiple legacy n8n connections to VueFlow connections
@@ -198,6 +198,7 @@ export function mapCanvasConnectionToLegacyConnection(
 export function mapLegacyEndpointsToCanvasConnectionPort(
 	endpoints: INodeTypeDescription['inputs'],
 	endpointNames: string[] = [],
+	nodeType?: string,
 ): CanvasConnectionPort[] {
 	if (typeof endpoints === 'string') {
 		console.warn('Node endpoints have not been evaluated', endpoints);
@@ -209,10 +210,20 @@ export function mapLegacyEndpointsToCanvasConnectionPort(
 		const type = isValidNodeConnectionType(typeValue) ? typeValue : NodeConnectionTypes.Main;
 		const label =
 			typeof endpoint === 'string' ? endpointNames[endpointIndex] : endpoint.displayName;
-		const index =
-			endpoints
-				.slice(0, endpointIndex + 1)
-				.filter((e) => (typeof e === 'string' ? e : e.type) === type).length - 1;
+
+		// For AI Agent nodes, use stable connection index mapping to prevent visual bugs
+		// when dynamically adding/removing connectors like output parser
+		let index: number;
+		if (nodeType === AGENT_NODE_TYPE) {
+			index = getStableAIAgentConnectionIndex(type, endpoints, endpointIndex);
+		} else {
+			// Original logic for other nodes
+			index =
+				endpoints
+					.slice(0, endpointIndex + 1)
+					.filter((e) => (typeof e === 'string' ? e : e.type) === type).length - 1;
+		}
+
 		const required = typeof endpoint === 'string' ? false : endpoint.required;
 		const maxConnections = typeof endpoint === 'string' ? undefined : endpoint.maxConnections;
 
@@ -224,6 +235,43 @@ export function mapLegacyEndpointsToCanvasConnectionPort(
 			...(required ? { required } : {}),
 		};
 	});
+}
+
+/**
+ * Provides stable connection indexes for AI Agent nodes to prevent visual connection bugs
+ * when connectors are dynamically added/removed (e.g., output parser toggle)
+ */
+function getStableAIAgentConnectionIndex(
+	connectionType: NodeConnectionType,
+	endpoints: INodeTypeDescription['inputs'] | INodeTypeDescription['outputs'],
+	endpointIndex: number,
+): number {
+	// Define stable index mapping for AI Agent connection types
+	// This ensures that connection visual positions remain consistent
+	// regardless of dynamic connector changes
+	const stableIndexMap: Partial<Record<NodeConnectionType, number>> = {
+		[NodeConnectionTypes.Main]: 0,
+		[NodeConnectionTypes.AiLanguageModel]: 0,
+		[NodeConnectionTypes.AiTool]: 0,
+		[NodeConnectionTypes.AiMemory]: 0,
+		[NodeConnectionTypes.AiOutputParser]: 0,
+		[NodeConnectionTypes.AiDocument]: 0,
+		[NodeConnectionTypes.AiVectorStore]: 0,
+	};
+
+	// For AI Agent nodes, each connection type gets a consistent index
+	// This prevents visual bugs when the output parser is toggled
+	if (connectionType in stableIndexMap) {
+		return stableIndexMap[connectionType] ?? 0;
+	}
+
+	// Fallback to original logic for unknown connection types
+	if (typeof endpoints === 'string') return 0;
+	return (
+		endpoints
+			.slice(0, endpointIndex + 1)
+			.filter((e) => (typeof e === 'string' ? e : e.type) === connectionType).length - 1
+	);
 }
 
 /**
